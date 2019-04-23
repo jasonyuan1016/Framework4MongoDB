@@ -6,6 +6,7 @@ using Framework.MongoDB.Extension;
 using Framework.MongoDB.Model;
 using FrameWork.Extension;
 using FrameWork.MongoDB.MongoDbConfig;
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Conventions;
 using MongoDB.Driver;
 
@@ -702,6 +703,41 @@ namespace FrameWork.MongoDB
         #endregion
 
         #endregion
+
+
+        public List<BsonDocument> GetGroupData<T>(List<string> _groupKeys, List<string> _groupFileds, List<string> _matchs = null)
+        {
+            var mongoAttribute = typeof(T).GetMongoAttribute();
+            if (mongoAttribute.IsNull())
+                throw new ArgumentException("MongoAttribute不能为空");
+            var db = _mongoClient.GetDatabase(mongoAttribute.Database);
+            var coll = db.GetCollection<BsonDocument>(mongoAttribute.Collection);
+
+            IList<IPipelineStageDefinition> stages = new List<IPipelineStageDefinition>();
+            string strTmp = string.Empty;
+            if (_matchs != null && _matchs.Count > 0)
+            {
+                
+                foreach (string _m in _matchs)
+                {
+                    strTmp = "," + _m;
+                }
+                stages.Add(new JsonPipelineStageDefinition<BsonDocument, BsonDocument>("{$match:{" + strTmp.Substring(1) + "}}"));
+            }
+            strTmp = string.Empty;
+            foreach (string _k in _groupKeys)
+            {
+                strTmp += string.Format(",{0}:'${0}'", _k);
+            }
+            string strFileds = string.Empty;
+            foreach (string _f in _groupFileds)
+            {
+                strFileds += "," + _f;
+            }
+            stages.Add(new JsonPipelineStageDefinition<BsonDocument, BsonDocument>("{$group:{_id:{" + strTmp.Substring(1) + "}" + strFileds + "}}"));
+            PipelineDefinition<BsonDocument, BsonDocument> pipeline = new PipelineStagePipelineDefinition<BsonDocument, BsonDocument>(stages);
+            return coll.Aggregate(pipeline).ToList();
+        }
     }
     #endregion
 }
